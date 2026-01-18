@@ -1,0 +1,7 @@
+{
+  "name": "VisionGuard AI",
+  "description": "แดชบอร์ดตรวจจับวัตถุด้วย Deep Learning ระดับองค์กร พร้อมระบบวิเคราะห์เรียลไทม์ การตรวจจับผู้บุกรุก และระบบรักษาความปลอดภัยอัจฉริยะ",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
