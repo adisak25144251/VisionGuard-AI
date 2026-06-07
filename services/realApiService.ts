@@ -1,55 +1,57 @@
 
 import { API_BASE_URL } from '../constants';
 import { PlateRecord, FaceProfile, FaceEvent } from '../types';
-import { generateMockPlates, generateMockFaceProfiles, generateMockFaceEvents } from './mockAiService';
 
-// --- PRODUCTION MODE: HYBRID FETCH ---
-// Tries to fetch from real API, falls back to Mock Generators if offline/unreachable
-const fetchReal = async <T>(endpoint: string, fallbackFactory: () => T): Promise<T> => {
+/**
+ * Robust fetch wrapper with exponential backoff retry logic.
+ * Ensures high availability even during network jitters.
+ */
+const fetchWithRetry = async <T>(
+  endpoint: string, 
+  retries = 3, 
+  delay = 500
+): Promise<T> => {
   try {
-    // Add a short timeout to fail fast if backend is not running
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 1500); // 1.5s timeout for snappy UI
+    const id = setTimeout(() => controller.abort(), 2500); // 2.5s Strict Timeout
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        // 'Authorization': `Bearer ${localStorage.getItem('visionguard_token')}`
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
     
     clearTimeout(id);
 
     if (!response.ok) {
-      console.debug(`API Error ${response.status} at ${endpoint}: Using simulation data.`);
-      return fallbackFactory();
+        throw new Error(`HTTP ${response.status}`);
     }
     
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
-    // Suppress severe error logging for cleaner demo experience
-    console.debug(`[Offline Mode] Could not connect to ${endpoint}. Using simulation data.`);
-    return fallbackFactory(); 
+    if (retries > 0) {
+      console.warn(`Fetch failed for ${endpoint}. Retrying in ${delay}ms... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(endpoint, retries - 1, delay * 2);
+    } else {
+      throw error;
+    }
   }
 };
 
 // --- ALPR API ---
 export const getRealPlates = async (): Promise<PlateRecord[]> => {
-  const data = await fetchReal<PlateRecord[]>('/lpr', () => generateMockPlates(20));
-  // Ensure dates are parsed correctly whether from API (string) or Mock (Date)
+  const data = await fetchWithRetry<PlateRecord[]>('/lpr');
   return data.map(d => ({ ...d, timestamp: new Date(d.timestamp) }));
 };
 
 // --- Face Recognition API ---
 export const getRealFaceProfiles = async (): Promise<FaceProfile[]> => {
-  const data = await fetchReal<FaceProfile[]>('/faces/profiles', () => generateMockFaceProfiles(12));
+  const data = await fetchWithRetry<FaceProfile[]>('/faces/profiles');
   return data.map(d => ({ ...d, lastSeen: new Date(d.lastSeen) }));
 };
 
 export const getRealFaceEvents = async (): Promise<FaceEvent[]> => {
-  const data = await fetchReal<FaceEvent[]>('/faces/events', () => generateMockFaceEvents(15));
+  const data = await fetchWithRetry<FaceEvent[]>('/faces/events');
   return data.map(d => ({ ...d, timestamp: new Date(d.timestamp) }));
 };
 
@@ -59,35 +61,49 @@ export const connectTrafficWebSocket = (onMessage: (data: any) => void) => {
   const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + '/traffic';
   
   let ws: WebSocket | null = null;
+  let reconnectInterval: any = null;
   
-  try {
-    ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
-      console.log('Connected to Real Traffic Analytics Stream');
-    };
-
-    ws.onmessage = (event) => {
+  const connect = () => {
       try {
-        const data = JSON.parse(event.data);
-        onMessage(data);
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('Connected to Real Traffic Analytics Stream');
+          if (reconnectInterval) clearInterval(reconnectInterval);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            onMessage(data);
+          } catch (e) {
+            console.error('Failed to parse WS message', e);
+          }
+        };
+
+        ws.onerror = (event) => {
+          // Silent fail for demo
+        };
+
+        ws.onclose = () => {
+          console.debug("Traffic WebSocket Disconnected. Attempting Reconnect...");
+          // Simple reconnection logic
+          if (!reconnectInterval) {
+              reconnectInterval = setInterval(connect, 5000);
+          }
+        };
+
       } catch (e) {
-        console.error('Failed to parse WS message', e);
+        console.debug('Could not connect to WebSocket', e);
       }
-    };
+  };
 
-    ws.onerror = (event) => {
-      // Silent fail for demo - prevents console spam if backend is off
-      // console.warn("Traffic WebSocket connection failed.");
-    };
+  connect();
 
-    ws.onclose = () => {
-      console.debug("Traffic WebSocket Disconnected");
-    };
-
-  } catch (e) {
-    console.debug('Could not connect to WebSocket', e);
-  }
-
-  return ws;
+  return {
+      close: () => {
+          if (ws) ws.close();
+          if (reconnectInterval) clearInterval(reconnectInterval);
+      }
+  };
 };

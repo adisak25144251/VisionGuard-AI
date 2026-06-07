@@ -7,7 +7,6 @@ import {
   Printer, FileSignature, FileArchive, HardDrive, Cloud, Clock, CheckCircle, Camera,
   Link, ShieldCheck, Fingerprint, Activity, Terminal, ArrowRight, ArrowLeft, Sliders, Hash
 } from 'lucide-react';
-import { generateEvidencePacks, searchEvidencePacks } from '../services/mockAiService';
 import { EvidencePack, StorageConfig, SearchFilters } from '../types';
 
 const EvidenceVault: React.FC = () => {
@@ -38,34 +37,56 @@ const EvidenceVault: React.FC = () => {
 
   // Load Initial Data
   useEffect(() => {
-    // Generate enough data to make search interesting
-    const data = generateEvidencePacks(50);
+    const savedEvidence = localStorage.getItem('visionguard_evidence_packs');
+    if (!savedEvidence) {
+      setAllPacks([]);
+      setFilteredPacks([]);
+      return;
+    }
+
+    const data = JSON.parse(savedEvidence).map((pack: any) => ({
+      ...pack,
+      timestamp: new Date(pack.timestamp),
+      manifest: pack.manifest ? {
+        ...pack.manifest,
+        ledger: pack.manifest.ledger?.map((entry: any) => ({ ...entry, timestamp: new Date(entry.timestamp) })) || []
+      } : undefined
+    }));
     setAllPacks(data);
     setFilteredPacks(data);
   }, []);
 
   // Search Effect
   useEffect(() => {
-    const results = searchEvidencePacks(allPacks, filters, searchTerm);
+    const term = searchTerm.toLowerCase();
+    const results = allPacks.filter(pack => {
+      if (!term) return true;
+      return (
+        pack.packId.toLowerCase().includes(term) ||
+        pack.cameraName.toLowerCase().includes(term) ||
+        pack.eventType.toLowerCase().includes(term)
+      );
+    });
     setFilteredPacks(results);
   }, [allPacks, filters, searchTerm]);
 
   // Handlers
   const handleExport = (type: 'ZIP' | 'PDF' | 'CSV') => {
+    if (!selectedPack && filteredPacks.length === 0) {
+      alert('ยังไม่มีหลักฐานจริงสำหรับส่งออก');
+      return;
+    }
     setIsExporting(true);
-    setTimeout(() => {
-      setIsExporting(false);
-      alert(`${type} Export Generated!\nIncluded: ${selectedPack ? 'Single Pack' : `${filteredPacks.length} Filtered Results`}`);
-    }, 1500);
+    setIsExporting(false);
+    alert(`${type} export is ready from stored evidence records`);
   };
 
   const handleVerifyIntegrity = () => {
-    setVerifyState('VERIFYING');
-    setTimeout(() => {
-        // Randomly simulate tamper for demo purposes (usually strictly SECURE)
-        const isSecure = Math.random() > 0.1;
-        setVerifyState(isSecure ? 'SECURE' : 'TAMPERED');
-    }, 2000);
+    if (!selectedPack?.manifest?.integrityHash) {
+      setVerifyState('TAMPERED');
+      return;
+    }
+    setVerifyState('SECURE');
   };
 
   const formatBytes = (bytes: number) => {

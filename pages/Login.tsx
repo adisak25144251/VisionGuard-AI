@@ -1,32 +1,31 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, ShieldCheck, Fingerprint, ChevronRight, Loader2, Globe } from 'lucide-react';
+import { Zap, ShieldCheck, Fingerprint, ChevronRight, Globe } from 'lucide-react';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState(1); // 1: Creds, 2: MFA
-  const [email, setEmail] = useState('admin@visionguard.ai');
-  const [password, setPassword] = useState('password');
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState('');
+  const [workspaceName, setWorkspaceName] = useState('VisionGuard Local');
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    // Simulate API Call
-    setTimeout(() => {
-      setIsLoading(false);
-      setStep(2);
-    }, 1000);
+    if (!email.trim() || !workspaceName.trim()) return;
+    setStep(2);
   };
 
   const handleMFA = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      localStorage.setItem('visionguard_token', 'mock-jwt-token-secure');
-      setIsLoading(false);
-      navigate('/');
-    }, 1500);
+    const session = {
+      id: crypto.randomUUID?.() || `local-${Date.now()}`,
+      email,
+      workspaceName,
+      createdAt: new Date().toISOString(),
+      mode: 'LOCAL_DEVICE_SESSION'
+    };
+    localStorage.setItem('visionguard_token', JSON.stringify(session));
+    navigate('/');
   };
 
   return (
@@ -78,8 +77,8 @@ const Login: React.FC = () => {
           {step === 1 ? (
             <div className="glass-panel p-8 rounded-2xl border border-slate-700 shadow-2xl animate-fade-in">
               <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-white">Sign in to Command Center</h2>
-                <p className="text-slate-400 text-sm mt-2">Enter your credentials to access the secure dashboard.</p>
+                <h2 className="text-2xl font-bold text-white">Start Local Command Session</h2>
+                <p className="text-slate-400 text-sm mt-2">สำหรับใช้งาน webcam จริงบนอุปกรณ์นี้โดยไม่สร้างข้อมูลจำลอง</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-5">
@@ -89,30 +88,31 @@ const Login: React.FC = () => {
                     type="email" 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Password</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Workspace</label>
                   <input 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    type="text" 
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                   />
                 </div>
 
                 <button 
                   type="submit" 
-                  disabled={isLoading}
+                  disabled={!email.trim() || !workspaceName.trim()}
                   className="w-full bg-primary-600 hover:bg-primary-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-primary-900/20 transition-all flex items-center justify-center gap-2"
                 >
-                  {isLoading ? <Loader2 className="animate-spin" /> : <>Sign In <ChevronRight size={18} /></>}
+                  Continue <ChevronRight size={18} />
                 </button>
               </form>
 
               <div className="mt-6 text-center">
-                <a href="#" className="text-xs text-slate-500 hover:text-primary-400 transition-colors">Forgot your password?</a>
+                <span className="text-xs text-slate-500">ต้องการ SSO/JWT จริงให้เชื่อมต่อ backend ผ่าน environment/API</span>
               </div>
             </div>
           ) : (
@@ -120,20 +120,33 @@ const Login: React.FC = () => {
                <div className="w-16 h-16 bg-primary-500/20 text-primary-400 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary-500/30">
                  <Fingerprint size={32} />
                </div>
-               <h2 className="text-2xl font-bold text-white mb-2">Two-Factor Authentication</h2>
+               <h2 className="text-2xl font-bold text-white mb-2">Device Trust Confirmation</h2>
                <p className="text-slate-400 text-sm mb-6">
-                 For security, please verify your identity using your biometrics or hardware key.
+                 ยืนยันว่าการ session นี้เป็น local device session และข้อมูลวิเคราะห์มาจากกล้องจริงของผู้ใช้
                </p>
+
+               <label className="flex gap-3 text-left bg-slate-900/70 border border-slate-800 rounded-lg p-3 mb-4 cursor-pointer">
+                 <input
+                   type="checkbox"
+                   checked={acknowledged}
+                   onChange={(event) => setAcknowledged(event.target.checked)}
+                   className="mt-1 accent-primary-500"
+                 />
+                 <span className="text-xs text-slate-400 leading-relaxed">
+                   ฉันเข้าใจว่าโหมดนี้ไม่ใช่ SSO backend แต่เป็น session ใน browser สำหรับเปิด webcam จริงบน HTTPS/Vercel
+                 </span>
+               </label>
 
                <div className="space-y-3">
                  <button 
                    onClick={handleMFA}
+                   disabled={!acknowledged}
                    className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg border border-slate-700 transition-all flex items-center justify-center gap-2"
                  >
-                    {isLoading ? <Loader2 className="animate-spin" /> : <>Use Touch ID / Face ID</>}
+                    Start Monitoring Session
                  </button>
-                 <button className="w-full bg-transparent hover:bg-slate-800/50 text-slate-400 hover:text-white py-2 rounded-lg text-sm transition-all">
-                    Use Authenticator Code
+                 <button onClick={() => setStep(1)} className="w-full bg-transparent hover:bg-slate-800/50 text-slate-400 hover:text-white py-2 rounded-lg text-sm transition-all">
+                    Back
                  </button>
                </div>
             </div>

@@ -1,33 +1,15 @@
 import React, { useRef, useEffect } from 'react';
-
-interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  label: string;
-  color: string;
-  dx: number;
-  dy: number;
-}
+import { VisionBox } from '../services/edgeVision';
 
 interface AiOverlayProps {
   active: boolean;
   showLanes: boolean;
   showFence: boolean;
+  boxes?: VisionBox[];
 }
 
-const AiOverlay: React.FC<AiOverlayProps> = ({ active, showLanes, showFence }) => {
+const AiOverlay: React.FC<AiOverlayProps> = ({ active, showLanes, showFence, boxes = [] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const boxesRef = useRef<Box[]>([]);
-
-  useEffect(() => {
-    // Initialize mock boxes
-    boxesRef.current = [
-      { x: 50, y: 100, w: 60, h: 120, label: 'Person 98%', color: '#22d3ee', dx: 0.5, dy: 0.2 },
-      { x: 200, y: 150, w: 140, h: 80, label: 'Car 95%', color: '#818cf8', dx: -0.8, dy: 0 },
-    ];
-  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -93,37 +75,30 @@ const AiOverlay: React.FC<AiOverlayProps> = ({ active, showLanes, showFence }) =
         ctx.fillText('RESTRICTED ZONE', 20, 30);
       }
 
-      // Draw & Update Boxes
-      boxesRef.current.forEach(box => {
-        // Update position
-        box.x += box.dx;
-        box.y += box.dy;
+      boxes.forEach(box => {
+        const x = (box.x / 100) * canvas.width;
+        const y = (box.y / 100) * canvas.height;
+        const w = (box.w / 100) * canvas.width;
+        const h = (box.h / 100) * canvas.height;
+        const label = `${box.label} ${Math.round(box.confidence * 100)}%`;
 
-        // Bounce
-        if (box.x <= 0 || box.x + box.w >= canvas.width) box.dx *= -1;
-        if (box.y <= 0 || box.y + box.h >= canvas.height) box.dy *= -1;
-
-        // Draw Box
         ctx.strokeStyle = box.color;
         ctx.lineWidth = 2;
-        ctx.strokeRect(box.x, box.y, box.w, box.h);
+        ctx.strokeRect(x, y, w, h);
 
-        // Draw Label Background
         ctx.fillStyle = box.color;
-        const textWidth = ctx.measureText(box.label).width;
-        ctx.fillRect(box.x, box.y - 20, textWidth + 10, 20);
-
-        // Draw Text
-        ctx.fillStyle = '#000';
         ctx.font = 'bold 12px Inter';
-        ctx.fillText(box.label, box.x + 5, box.y - 6);
+        const textWidth = ctx.measureText(label).width;
+        ctx.fillRect(x, Math.max(0, y - 20), textWidth + 10, 20);
 
-        // Corner accents
+        ctx.fillStyle = '#000';
+        ctx.fillText(label, x + 5, Math.max(14, y - 6));
+
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(box.x, box.y + 10);
-        ctx.lineTo(box.x, box.y);
-        ctx.lineTo(box.x + 10, box.y);
+        ctx.moveTo(x, y + 10);
+        ctx.lineTo(x, y);
+        ctx.lineTo(x + 10, y);
         ctx.stroke();
       });
 
@@ -133,7 +108,7 @@ const AiOverlay: React.FC<AiOverlayProps> = ({ active, showLanes, showFence }) =
     render();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [active, showLanes, showFence]);
+  }, [active, showLanes, showFence, boxes]);
 
   return (
     <canvas 

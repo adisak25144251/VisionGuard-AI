@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Save, Server, Camera, Bell, Users, Shield, 
@@ -9,10 +10,11 @@ import {
   Clock, EyeOff, FileSignature, Fingerprint, ShieldCheck, Network,
   ChevronRight, ChevronLeft, CheckCircle2, XCircle, Search, RefreshCw,
   ShieldAlert, Power, Moon, Sun, Laptop, KeyRound, Terminal, Eye,
-  Settings as SettingsIcon, MoreHorizontal, LogOut, Scan, ArrowRight, ExternalLink, Copy, AlertOctagon
+  Settings as SettingsIcon, MoreHorizontal, LogOut, Scan, ArrowRight, ExternalLink, Copy, AlertOctagon,
+  Move, WifiOff, Crosshair
 } from 'lucide-react';
 import { MOCK_CAMERAS } from '../constants';
-import { generateAccessLogs, getRetentionRules } from '../services/mockAiService';
+import { getRetentionRules } from '../services/mockAiService';
 import { CameraStatus, Camera as CameraType, PrivacyConfig, AccessLog, RetentionRule } from '../types';
 
 // --- TYPES FOR SETTINGS STATE ---
@@ -76,8 +78,24 @@ const Settings: React.FC = () => {
   const [availableWebcams, setAvailableWebcams] = useState<MediaDeviceInfo[]>([]);
 
   const [editingCamId, setEditingCamId] = useState<string | null>(null);
+  
+  // Enhanced Form State to include Tamper Detection
   const [camForm, setCamForm] = useState({
-    name: '', ip: '', location: '', type: 'RTSP', url: ''
+    name: '', 
+    ip: '', 
+    location: '', 
+    type: 'RTSP', 
+    url: '',
+    // Tamper Detection Config
+    tamper: {
+      enabled: false,
+      sensitivity: 75,
+      occlusion: true,
+      rotation: true,
+      light: false,
+      signal: true,
+      alertLevel: 'HIGH'
+    }
   });
 
   // --- 4. AI STATE ---
@@ -105,25 +123,38 @@ const Settings: React.FC = () => {
 
   // --- INITIAL LOAD ---
   useEffect(() => {
-    // Load Logs & Rules (Mock)
-    setAccessLogs(generateAccessLogs(10));
+    const savedAccessLogs = localStorage.getItem('visionguard_access_logs');
+    setAccessLogs(savedAccessLogs ? JSON.parse(savedAccessLogs).map((log: any) => ({ ...log, timestamp: new Date(log.timestamp) })) : []);
     setRetentionRules(getRetentionRules());
 
-    // Load Cameras
+    // Load Cameras with Error Handling
     const savedCams = localStorage.getItem('visionguard_cameras');
     if (savedCams) {
-        setCameras(JSON.parse(savedCams));
+        try {
+            setCameras(JSON.parse(savedCams));
+        } catch(e) {
+            console.error("Storage corrupted, resetting cameras");
+            setCameras(MOCK_CAMERAS);
+        }
     } else {
         setCameras(MOCK_CAMERAS);
     }
 
-    // Load Global Config (Mock Persistence)
+    // Load Global Config
     const savedGlobal = localStorage.getItem('visionguard_global');
-    if (savedGlobal) setGlobalConfig(JSON.parse(savedGlobal));
+    if (savedGlobal) {
+        try {
+            setGlobalConfig(JSON.parse(savedGlobal));
+        } catch(e) {}
+    }
     
     // Load Users
     const savedUsers = localStorage.getItem('visionguard_users');
-    if (savedUsers) setUsers(JSON.parse(savedUsers));
+    if (savedUsers) {
+        try {
+            setUsers(JSON.parse(savedUsers));
+        } catch(e) {}
+    }
 
     // Detect Environment Restrictions
     const h = window.location.hostname;
@@ -152,17 +183,17 @@ const Settings: React.FC = () => {
     localStorage.setItem('visionguard_global', JSON.stringify(globalConfig));
     localStorage.setItem('visionguard_users', JSON.stringify(users));
     
-    // Simulate Network Delay
-    setTimeout(() => {
-        setIsSaving(false);
-        showToast("System Configuration Saved Successfully");
-    }, 1200);
+    setIsSaving(false);
+    showToast("System Configuration Saved Successfully");
   };
 
   // --- CAMERA HANDLERS ---
   const openAddCamera = () => {
     setEditingCamId(null);
-    setCamForm({ name: '', ip: '', location: '', type: 'RTSP', url: '' });
+    setCamForm({ 
+      name: '', ip: '', location: '', type: 'RTSP', url: '',
+      tamper: { enabled: false, sensitivity: 75, occlusion: true, rotation: true, light: false, signal: true, alertLevel: 'HIGH' }
+    });
     setIsPairing(false);
     setAvailableWebcams([]); // Reset webcams
     setShowCameraModal(true);
@@ -170,12 +201,19 @@ const Settings: React.FC = () => {
 
   const openEditCamera = (cam: CameraType) => {
     setEditingCamId(cam.id);
+    
+    // Retrieve existing tamper config or default
+    const existingTamper = (cam as any).tamper || {
+      enabled: false, sensitivity: 75, occlusion: true, rotation: true, light: false, signal: true, alertLevel: 'HIGH'
+    };
+
     setCamForm({
         name: cam.name,
         ip: cam.ipAddress,
         location: cam.location,
         type: cam.streamType,
-        url: cam.url
+        url: cam.url,
+        tamper: existingTamper
     });
     setIsPairing(false);
     
@@ -222,16 +260,20 @@ const Settings: React.FC = () => {
   const handleSaveCamera = () => {
     if (!camForm.name) return;
 
+    let updatedCameras: CameraType[] = [];
+
     if (editingCamId) {
         // Update existing
-        setCameras(prev => prev.map(c => c.id === editingCamId ? {
+        updatedCameras = cameras.map(c => c.id === editingCamId ? {
             ...c,
             name: camForm.name,
             ipAddress: camForm.ip,
             location: camForm.location,
             streamType: camForm.type,
-            url: camForm.url || c.url
-        } : c));
+            url: camForm.url || c.url,
+            // Save extended tamper config
+            tamper: camForm.tamper
+        } as CameraType : c);
         showToast(`Camera "${camForm.name}" updated`);
     } else {
         // Create new
@@ -242,7 +284,7 @@ const Settings: React.FC = () => {
             ipAddress: camForm.ip,
             macAddress: '00:00:00:00:00:00',
             status: 'ONLINE',
-            url: camForm.url || `https://picsum.photos/800/450?random=${Date.now()}`,
+            url: camForm.url,
             streamType: camForm.type,
             features: ['Intrusion'],
             security: MOCK_CAMERAS[0]?.security || {
@@ -264,24 +306,32 @@ const Settings: React.FC = () => {
                 retentionPolicy: '30_DAYS'
             },
             privacyMasks: [],
-            activeModels: []
+            activeModels: [],
+            // Add custom property for tamper
+            ...({ tamper: camForm.tamper })
         };
-        setCameras(prev => [...prev, newCam]);
+        updatedCameras = [...cameras, newCam];
         showToast("New Device Added");
     }
+    
+    // UPDATE STATE AND LOCAL STORAGE IMMEDIATELY
+    setCameras(updatedCameras);
+    localStorage.setItem('visionguard_cameras', JSON.stringify(updatedCameras));
     setShowCameraModal(false);
   };
 
   const handleDeleteCamera = (id: string) => {
     if(confirm('Are you sure? This will remove the device and its history.')) {
-        setCameras(prev => prev.filter(c => c.id !== id));
+        const updatedCameras = cameras.filter(c => c.id !== id);
+        setCameras(updatedCameras);
+        localStorage.setItem('visionguard_cameras', JSON.stringify(updatedCameras));
         showToast("Device Removed");
     }
   };
 
   // ... (Keep existing Mobile Pairing Handlers: startMobilePairing, getFullPairingUrl, copyToClipboard)
   const startMobilePairing = () => {
-      const id = `mob-${Math.floor(Math.random()*100000)}`;
+      const id = `mob-${crypto.randomUUID?.().slice(0, 8) || Date.now().toString(36)}`;
       setPairingId(id);
       
       // Attempt to guess the best URL
@@ -302,6 +352,7 @@ const Settings: React.FC = () => {
       
       // Auto-fill form for the user
       setCamForm({
+          ...camForm,
           name: `Mobile Unit ${id.split('-')[1]}`,
           ip: 'Mobile 5G/WiFi',
           location: 'Roaming',
@@ -332,7 +383,9 @@ const Settings: React.FC = () => {
           status: 'Pending',
           lastLogin: '-'
       };
-      setUsers(prev => [...prev, newUser]);
+      const updatedUsers = [...users, newUser];
+      setUsers(updatedUsers);
+      localStorage.setItem('visionguard_users', JSON.stringify(updatedUsers));
       setShowUserModal(false);
       setUserForm({ name: '', email: '', role: 'Operator' });
       showToast(`Invitation sent to ${newUser.email}`);
@@ -340,7 +393,9 @@ const Settings: React.FC = () => {
 
   const handleDeleteUser = (id: number) => {
       if (confirm('Revoke access for this user?')) {
-          setUsers(prev => prev.filter(u => u.id !== id));
+          const updatedUsers = users.filter(u => u.id !== id);
+          setUsers(updatedUsers);
+          localStorage.setItem('visionguard_users', JSON.stringify(updatedUsers));
           showToast("User Access Revoked");
       }
   };
@@ -595,7 +650,6 @@ const Settings: React.FC = () => {
                 </div>
             </div>
         );
-        // ... (Other cases: 'ai', 'users', 'notifications', 'storage' - Keep existing implementations)
         case 'ai': return (
             <div className="space-y-6 animate-fade-in">
                 <div className="glass-panel p-6 rounded-xl border border-slate-700">
@@ -809,8 +863,8 @@ const Settings: React.FC = () => {
       {/* 1. Camera Modal / Mobile Pairing */}
       {showCameraModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 sticky top-0 z-10">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <Server size={18} className="text-primary-400"/> {editingCamId ? 'Edit Device' : 'Add New Device'}
                     </h3>
@@ -953,11 +1007,88 @@ const Settings: React.FC = () => {
                                 />
                             )}
                         </div>
+
+                        {/* --- NEW: ADVANCED TAMPER CONFIG --- */}
+                        <div className="border-t border-slate-800 pt-4 mt-2">
+                            <h4 className="text-xs font-bold text-white mb-3 uppercase flex items-center gap-2">
+                                <ShieldAlert size={14} className="text-red-400"/> Tamper Guard & Integrity
+                            </h4>
+                            
+                            <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-700 space-y-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-bold text-slate-200">Enable Tamper Detection</span>
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 accent-red-500"
+                                        checked={camForm.tamper.enabled}
+                                        onChange={(e) => setCamForm({...camForm, tamper: {...camForm.tamper, enabled: e.target.checked}})}
+                                    />
+                                </div>
+
+                                {camForm.tamper.enabled && (
+                                    <div className="space-y-3 pl-2 border-l-2 border-slate-700 animate-fade-in">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button 
+                                                onClick={() => setCamForm({...camForm, tamper: {...camForm.tamper, occlusion: !camForm.tamper.occlusion}})}
+                                                className={`flex items-center gap-2 p-2 rounded text-xs border transition-all ${camForm.tamper.occlusion ? 'bg-red-900/20 border-red-500 text-red-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}
+                                            >
+                                                <EyeOff size={14} /> Lens Occlusion
+                                            </button>
+                                            <button 
+                                                onClick={() => setCamForm({...camForm, tamper: {...camForm.tamper, rotation: !camForm.tamper.rotation}})}
+                                                className={`flex items-center gap-2 p-2 rounded text-xs border transition-all ${camForm.tamper.rotation ? 'bg-red-900/20 border-red-500 text-red-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}
+                                            >
+                                                <Move size={14} /> Rotation
+                                            </button>
+                                            <button 
+                                                onClick={() => setCamForm({...camForm, tamper: {...camForm.tamper, light: !camForm.tamper.light}})}
+                                                className={`flex items-center gap-2 p-2 rounded text-xs border transition-all ${camForm.tamper.light ? 'bg-red-900/20 border-red-500 text-red-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}
+                                            >
+                                                <Zap size={14} /> Light Attack
+                                            </button>
+                                            <button 
+                                                onClick={() => setCamForm({...camForm, tamper: {...camForm.tamper, signal: !camForm.tamper.signal}})}
+                                                className={`flex items-center gap-2 p-2 rounded text-xs border transition-all ${camForm.tamper.signal ? 'bg-red-900/20 border-red-500 text-red-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}
+                                            >
+                                                <WifiOff size={14} /> Signal Loss
+                                            </button>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-xs text-slate-400 mb-1">
+                                                <span>Sensitivity Threshold</span>
+                                                <span className="text-white">{camForm.tamper.sensitivity}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" 
+                                                min="1" max="100" 
+                                                value={camForm.tamper.sensitivity}
+                                                onChange={(e) => setCamForm({...camForm, tamper: {...camForm.tamper, sensitivity: parseInt(e.target.value)}})}
+                                                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs text-slate-400 mb-1">Alert Severity</label>
+                                            <select 
+                                                className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white outline-none"
+                                                value={camForm.tamper.alertLevel}
+                                                onChange={(e) => setCamForm({...camForm, tamper: {...camForm.tamper, alertLevel: e.target.value}})}
+                                            >
+                                                <option value="CRITICAL">CRITICAL (Instant Siren)</option>
+                                                <option value="HIGH">HIGH (Push Notify)</option>
+                                                <option value="MEDIUM">MEDIUM (Log Only)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
                 
                 {!isPairing && (
-                    <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end gap-2">
+                    <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end gap-2 sticky bottom-0 z-10">
                         <button onClick={() => setShowCameraModal(false)} className="px-4 py-2 rounded text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
                         <button onClick={handleSaveCamera} disabled={!camForm.name || !camForm.url} className="px-6 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded text-sm font-bold shadow-lg">
                             {editingCamId ? 'Update Device' : 'Add Device'}

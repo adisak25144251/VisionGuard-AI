@@ -2,39 +2,41 @@
 import React, { useState, Suspense, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import LiveMonitor from './pages/LiveMonitor';
-import Events from './pages/Events';
-import Documentation from './pages/Documentation';
-import LPR from './pages/LPR';
-import FaceRecognition from './pages/FaceRecognition';
-import FeatureCenter from './pages/FeatureCenter';
-import EvidenceVault from './pages/EvidenceVault';
-import IntrusionDetection from './pages/IntrusionDetection';
-import VideoAnalytics from './pages/VideoAnalytics';
-import Settings from './pages/Settings';
-import LaneCounting from './pages/LaneCounting';
-import SafetyFire from './pages/SafetyFire';
-import ParkingManagement from './pages/ParkingManagement';
-import MobileSender from './pages/MobileSender';
-import SecurityHealth from './pages/SecurityHealth';
-import TraceRoute from './pages/TraceRoute';
-import AnomalyDetection from './pages/AnomalyDetection';
-import TamperDetection from './pages/TamperDetection'; 
-import DailySummary from './pages/DailySummary'; 
-import BehaviorAnalytics from './pages/BehaviorAnalytics'; 
-import ModelHealth from './pages/ModelHealth';
-import MapOperations from './pages/MapOperations';
 import ErrorBoundary from './components/ErrorBoundary';
 import SmartAssistant from './components/SmartAssistant';
 import { Bell, Menu, Search, Activity, Wifi, HelpCircle, LogOut, Bot } from 'lucide-react';
+
+// --- Lazy Load Pages for Enterprise Performance ---
+const Login = React.lazy(() => import('./pages/Login'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const LiveMonitor = React.lazy(() => import('./pages/LiveMonitor'));
+const Events = React.lazy(() => import('./pages/Events'));
+const Documentation = React.lazy(() => import('./pages/Documentation'));
+const LPR = React.lazy(() => import('./pages/LPR'));
+const FaceRecognition = React.lazy(() => import('./pages/FaceRecognition'));
+const FeatureCenter = React.lazy(() => import('./pages/FeatureCenter'));
+const EvidenceVault = React.lazy(() => import('./pages/EvidenceVault'));
+const IntrusionDetection = React.lazy(() => import('./pages/IntrusionDetection'));
+const VideoAnalytics = React.lazy(() => import('./pages/VideoAnalytics'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const LaneCounting = React.lazy(() => import('./pages/LaneCounting'));
+const SafetyFire = React.lazy(() => import('./pages/SafetyFire'));
+const ParkingManagement = React.lazy(() => import('./pages/ParkingManagement'));
+const MobileSender = React.lazy(() => import('./pages/MobileSender'));
+const SecurityHealth = React.lazy(() => import('./pages/SecurityHealth'));
+const TraceRoute = React.lazy(() => import('./pages/TraceRoute'));
+const AnomalyDetection = React.lazy(() => import('./pages/AnomalyDetection'));
+const TamperDetection = React.lazy(() => import('./pages/TamperDetection')); 
+const DailySummary = React.lazy(() => import('./pages/DailySummary')); 
+const BehaviorAnalytics = React.lazy(() => import('./pages/BehaviorAnalytics')); 
+const ModelHealth = React.lazy(() => import('./pages/ModelHealth'));
+const MapOperations = React.lazy(() => import('./pages/MapOperations'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">
     <div className="flex flex-col items-center gap-3">
       <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-      <span className="text-xs font-mono animate-pulse">Initializing System...</span>
+      <span className="text-xs font-mono animate-pulse">VisionGuard OS Loading...</span>
     </div>
   </div>
 );
@@ -69,12 +71,12 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }, []);
   
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex overflow-hidden font-sans selection:bg-primary-500/30">
       <Sidebar isOpen={sidebarOpen} toggle={() => setSidebarOpen(false)} />
       
       <SmartAssistant isOpen={smartAssistantOpen} onClose={() => setSmartAssistantOpen(false)} />
 
-      <div className="flex-1 flex flex-col lg:ml-64 transition-all duration-300 h-screen">
+      <div className="flex flex-col w-full lg:w-[calc(100%-16rem)] lg:ml-64 transition-all duration-300 h-screen min-w-0">
         <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-20 px-6 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
             <button 
@@ -86,10 +88,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             
             <div className="hidden xl:flex items-center gap-4 text-xs font-mono border-l border-slate-800 pl-4 ml-2">
               <div className="flex items-center gap-2 text-green-400">
-                <Wifi size={14} /> <span>SIGNAL: EXCELLENT</span>
+                <Wifi size={14} /> <span>SIGNAL: STABLE</span>
               </div>
               <div className="flex items-center gap-2 text-primary-400">
-                <Activity size={14} /> <span>LATENCY: 14ms</span>
+                <Activity size={14} /> <span>LATENCY: 12ms</span>
               </div>
             </div>
           </div>
@@ -145,7 +147,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto custom-scrollbar relative">
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto overflow-x-hidden custom-scrollbar relative">
           {children}
         </main>
       </div>
